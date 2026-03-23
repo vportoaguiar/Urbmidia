@@ -762,7 +762,7 @@ function renderChecklist(secId) {
         </div>`;
       }).join('')}
       <div class="impeditivo-alert ${impeditivos.length?'show':''}">
-        ⚠ ${impeditivos.length} impeditivo(s) — ponto deve ser descartado para manter cronograma (20 min/ponto).
+        ⚠ ${impeditivos.length} item(ns) marcado(s) como X — considerar a ressalva na decisão final.
       </div>
       <div class="obs-block">
         <label>Observações da seção</label>
@@ -1177,7 +1177,7 @@ function generatePDF(s) {
   y=Math.max(ly,ry);
   ln(ML,y+2,ML+CW,y+2,C.mgray,0.3);
   sf('normal',6,C.mgray);
-  tx('Sinalize Ok/X/N/A por item. X impeditivo = ponto descartado imediatamente. Alvo: 20 min/ponto.',ML,y+5.5,{maxWidth:CW});
+  tx('Sinalize Ok/X/N/A por item. Itens marcados com X devem ser considerados na decisão final do parecer.',ML,y+5.5,{maxWidth:CW});
 
   // ── PÁG 2 ──────────────────────────────────────────────────────────────
   doc.addPage(); y=MT;
