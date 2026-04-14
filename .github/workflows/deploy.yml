@@ -1,4 +1,4 @@
-name: Build and Deploy to GitHub Pages
+name: Build and Deploy
 
 on:
   push:
@@ -6,29 +6,27 @@ on:
     paths:
       - 'checking-dashboard/**'
       - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./checking-dashboard
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'checking-dashboard/package-lock.json'
 
       - name: Install dependencies
+        working-directory: ./checking-dashboard
         run: npm install
 
       - name: Build
+        working-directory: ./checking-dashboard
         run: npm run build
 
       - name: Deploy to GitHub Pages
@@ -37,3 +35,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./checking-dashboard/dist
           destination_dir: checking-dashboard
+          cname: false
