@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/Urbmidia/',
+  base: '/Urbmidia/checking-dashboard/',
   build: {
     outDir: 'dist',
   }
