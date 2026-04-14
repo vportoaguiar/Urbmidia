@@ -3,9 +3,6 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'checking-dashboard/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 jobs:
@@ -13,21 +10,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './checking-dashboard/package-lock.json'
 
-      - name: Install dependencies
-        working-directory: ./checking-dashboard
-        run: npm install
-
-      - name: Build
-        working-directory: ./checking-dashboard
-        run: npm run build
+      - name: Install and Build
+        run: |
+          cd checking-dashboard
+          npm install
+          npm run build
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
@@ -35,3 +31,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./checking-dashboard/dist
           destination_dir: checking-dashboard
+          force_orphan: true
