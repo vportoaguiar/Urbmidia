@@ -6,10 +6,10 @@ export default defineConfig({
   base: '/Urbmidia/checking-dashboard/',
   server: {
     port: 3000,
-    open: true
   },
   build: {
     outDir: 'dist',
-    sourcemap: false
+    sourcemap: false,
+    minify: 'terser'
   }
 })
