@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -29,10 +29,9 @@ jobs:
         working-directory: ./checking-dashboard
         run: npm run build
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./checking-dashboard/dist
           destination_dir: checking-dashboard
-          cname: false
