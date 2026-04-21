@@ -403,6 +403,24 @@ html, body {
   font-size: 11px; color: var(--muted); text-align: center;
   margin-top: 6px; font-style: italic;
 }
+.rating-group { display: flex; gap: 10px; }
+.rating-btn {
+  flex: 1; padding: 14px 8px; border-radius: 5px;
+  border: 2px solid var(--border); background: var(--surface);
+  color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px; font-weight: 800; cursor: pointer;
+  transition: all .15s; text-align: center; line-height: 1;
+}
+.rating-btn .rating-sub {
+  display: block; font-size: 10px; font-weight: 600;
+  margin-top: 4px; letter-spacing: .04em;
+}
+.rating-btn.a.active { background: #052e16; color: #22c55e; border-color: #22c55e; }
+.rating-btn.b.active { background: #1a1500; color: #eab308; border-color: #eab308; }
+.rating-btn.c.active { background: #1a0800; color: #f97316; border-color: #f97316; }
+.rating-btn.a:hover  { border-color: #22c55e44; }
+.rating-btn.b:hover  { border-color: #eab30844; }
+.rating-btn.c:hover  { border-color: #f9731644; }
 .btn-ok-all {
   margin-left: auto; flex-shrink: 0;
   padding: 4px 10px; border-radius: 4px;
@@ -545,6 +563,7 @@ function defaultState() {
     pendencias: '',
     recomendacoes: '',
     fotos: Array(8).fill(null),
+    rating: null,
   };
 }
 
@@ -557,6 +576,7 @@ function loadCurrentState() {
     if (raw) {
       const s = JSON.parse(raw);
       if (!s.fotos) s.fotos = Array(8).fill(null);
+      if (s.rating === undefined) s.rating = null;
       return s;
     }
   } catch(e) {}
@@ -817,6 +837,25 @@ function renderParecer() {
   </div>
   <div class="section-card">
     <div class="section-head">
+      <div class="section-num" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent)">★</div>
+      <div class="section-title">Rating de Precificação</div>
+    </div>
+    <div class="section-body">
+      <div class="rating-group">
+        <button class="rating-btn a ${state.rating==='A'?'active':''}" onclick="setRating('A')">
+          A <span class="rating-sub">Premium</span>
+        </button>
+        <button class="rating-btn b ${state.rating==='B'?'active':''}" onclick="setRating('B')">
+          B <span class="rating-sub">Padrão</span>
+        </button>
+        <button class="rating-btn c ${state.rating==='C'?'active':''}" onclick="setRating('C')">
+          C <span class="rating-sub">Negociável</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="section-card">
+    <div class="section-head">
       <div class="section-num" style="background:#1a1a1a;color:#888">✎</div>
       <div class="section-title">Análise Técnica</div>
     </div>
@@ -936,6 +975,12 @@ function setObs(secId, val) {
 
 function setParecer(v) {
   state.parecer = state.parecer === v ? null : v;
+  scheduleSave();
+  renderContent();
+}
+
+function setRating(v) {
+  state.rating = state.rating === v ? null : v;
   scheduleSave();
   renderContent();
 }
@@ -1255,12 +1300,25 @@ function generatePDF(s) {
   }
   y+=3;
 
+  // Parecer + Rating lado a lado
+  const parecerW = CW * 0.62;
+  const ratingW  = CW - parecerW - 3;
   // Parecer
-  fr(ML,y,CW*0.42,16,C.dark);
+  fr(ML, y, parecerW*0.42, 16, C.dark);
   sf('bold',8,C.white); tx('PARECER FINAL DE VIABILIDADE',ML+3,y+5);
   sf('normal',6.5,C.mgray); tx('Resultado da avaliacao tecnica',ML+3,y+10);
-  fr(ML+CW*0.42,y,CW*0.58,16,parecerColor);
-  sf('bold',14,C.white); tx(parecerLabel,ML+CW*0.42+(CW*0.58)/2,y+10,{align:'center'});
+  fr(ML+parecerW*0.42, y, parecerW*0.58, 16, parecerColor);
+  sf('bold',13,C.white); tx(parecerLabel, ML+parecerW*0.42+(parecerW*0.58)/2, y+10, {align:'center'});
+  // Rating
+  const ratingColors = { A:[34,197,94], B:[234,179,8], C:[249,115,22] };
+  const ratingLabels = { A:'A — Premium', B:'B — Padrão', C:'C — Negociável' };
+  const ratingCol = s.rating ? ratingColors[s.rating] : C.mgray;
+  const ratingTxt = s.rating ? ratingLabels[s.rating] : '—';
+  const rx2 = ML + parecerW + 3;
+  fr(rx2, y, ratingW, 7, C.dgray);
+  sf('bold',6,C.white); tx('RATING PRECIFICACAO', rx2+3, y+4.5);
+  fr(rx2, y+7, ratingW, 9, ratingCol);
+  sf('bold',10,C.white); tx(ratingTxt, rx2+ratingW/2, y+13, {align:'center'});
   y+=19;
 
   sf('bold',6.5,C.dgray); tx('Justificativa:',ML,y+3.5); y+=5.5;
@@ -1280,8 +1338,11 @@ function generatePDF(s) {
   sf('normal',6,C.mgray);
   tx(`Urbmidia — Relatorio de Avaliacao de Ponto  |  Cod.: ${d.codigo||'—'}  |  Uso Interno  |  v1.2`,ML+CW/2,y+4,{align:'center'});
 
-  const safe=(d.codigo||'PONTO').replace(/[^a-zA-Z0-9\-_]/g,'_');
-  doc.save(`Relatorio_Avaliacao_${safe}.pdf`);
+  const safe = (d.endereco || d.codigo || 'PONTO')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-zA-Z0-9\s\-_]/g,'').trim()
+    .replace(/\s+/g,'_').substring(0, 60);
+  doc.save(`Parecer - ${safe}.pdf`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
