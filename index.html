@@ -403,6 +403,46 @@ html, body {
   font-size: 11px; color: var(--muted); text-align: center;
   margin-top: 6px; font-style: italic;
 }
+/* ── VENDA ── */
+.check-list { display: flex; flex-direction: column; gap: 6px; }
+.check-list-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 12px; cursor: pointer;
+  transition: all .15s;
+}
+.check-list-item:hover { border-color: var(--accent); }
+.check-list-item.checked { border-color: var(--ok); background: var(--ok-bg); }
+.check-box {
+  width: 18px; height: 18px; border-radius: 3px;
+  border: 2px solid var(--muted); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; font-size: 11px;
+}
+.check-list-item.checked .check-box { background: var(--ok); border-color: var(--ok); color: #000; }
+.check-list-label { font-size: 13px; font-weight: 500; }
+.yn-group { display: flex; gap: 8px; }
+.yn-btn {
+  flex: 1; padding: 10px; border-radius: 4px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  color: var(--muted); font-family: 'Barlow', sans-serif;
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
+  text-align: center;
+}
+.yn-btn.yes.active { background: var(--ok-bg);  color: var(--ok);  border-color: var(--ok); }
+.yn-btn.no.active  { background: var(--err-bg); color: var(--err); border-color: var(--err); }
+.yn-btn.opt1.active { background: var(--ok-bg);   color: var(--ok);   border-color: var(--ok); }
+.yn-btn.opt2.active { background: var(--err-bg);  color: var(--err);  border-color: var(--err); }
+.novo-local-block { margin-top: 8px; }
+
+/* ── FOTO GRID (venda 6 fotos) ── */
+.foto-grid-body-6 {
+  border: 1px solid var(--border); border-radius: 0 0 6px 6px;
+  padding: 12px; display: grid;
+  grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+@media(max-width:480px){ .foto-grid-body-6 { grid-template-columns: repeat(2,1fr); } }
+
 .rating-group { display: flex; gap: 10px; }
 .rating-btn {
   flex: 1; padding: 14px 8px; border-radius: 5px;
@@ -488,6 +528,7 @@ const TIPOS_AVAL = [
   "Ponto novo - Urbmídia",
   "Incorporação à rede",
   "Ponto novo - Parceria",
+  "Venda",
 ];
 
 const MODELOS = [
@@ -531,7 +572,7 @@ const CHECKLIST = [
   ]},
 ];
 
-const STEPS = [
+const STEPS_NORMAL = [
   { id:"ident",    label:"Identificação" },
   { id:"tipo",     label:"Tipo" },
   { id:"comercial",label:"1. Comercial" },
@@ -541,6 +582,15 @@ const STEPS = [
   { id:"legis",    label:"5. Legislação" },
   { id:"parecer",  label:"Parecer" },
 ];
+const STEPS_VENDA = [
+  { id:"ident",   label:"Identificação" },
+  { id:"tipo",    label:"Tipo" },
+  { id:"venda",   label:"Dados da Venda" },
+  { id:"parecer", label:"Parecer" },
+];
+function getSteps() {
+  return state.tipo_aval === 3 ? STEPS_VENDA : STEPS_NORMAL;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ESTADO
@@ -564,6 +614,18 @@ function defaultState() {
     recomendacoes: '',
     fotos: Array(8).fill(null),
     rating: null,
+    venda: {
+      nome_ponto: '', local_sugerido: '', posicao_visual: '', dimensoes: '',
+      altura_base: '',
+      equipamentos: { led:false, pc:false, sender_receiver:false, cabos:false,
+                      infra_eletrica:false, estrutura_fixacao:false, instalacao:false },
+      necessita_metalurgia: null,
+      viabilidade_eletrica: null,
+      circuito_eletrico: null,
+      necessita_licenca: null,
+      novo_local: '',
+      fotos_venda: Array(6).fill(null),
+    },
   };
 }
 
@@ -577,6 +639,7 @@ function loadCurrentState() {
       const s = JSON.parse(raw);
       if (!s.fotos) s.fotos = Array(8).fill(null);
       if (s.rating === undefined) s.rating = null;
+      if (!s.venda) s.venda = defaultState().venda;
       return s;
     }
   } catch(e) {}
@@ -667,7 +730,8 @@ function renderApp() {
 function renderSteps() {
   const row = document.getElementById('stepsRow');
   if (!row) return;
-  row.innerHTML = STEPS.map((s,i) => {
+  const steps = getSteps();
+  row.innerHTML = steps.map((s,i) => {
     const cls = i===state.step ? 'active' : (i<state.step ? 'done' : '');
     return `<button class="step-pill ${cls}" onclick="goStep(${i})">${s.label}</button>`;
   }).join('');
@@ -676,10 +740,12 @@ function renderSteps() {
 function renderContent() {
   const el = document.getElementById('appContent');
   if (!el) return;
-  const stepId = STEPS[state.step].id;
+  const steps = getSteps();
+  const stepId = steps[state.step] ? steps[state.step].id : 'ident';
   let html = `<div class="container">`;
   if      (stepId==='ident')   html += renderIdent();
   else if (stepId==='tipo')    html += renderTipo();
+  else if (stepId==='venda')   html += renderVenda();
   else if (stepId==='parecer') html += renderParecer();
   else                         html += renderChecklist(stepId);
   html += `</div>`;
@@ -746,10 +812,13 @@ function renderTipo() {
     <div class="section-body">
       <div class="radio-group">
         ${TIPOS_AVAL.map((t,i)=>`
-        <label class="radio-card ${state.tipo_aval===i?'selected':''}" onclick="selectTipo(${i})">
+        <label class="radio-card ${state.tipo_aval===i?'selected':''} ${i===3?'venda-card':''}" onclick="selectTipo(${i})" style="${i===3?'border-color:'+(state.tipo_aval===3?'var(--accent)':'#3a2a00')+';background:'+(state.tipo_aval===3?'#1a0f00':'var(--surface)'):''}">
           <input type="radio" name="tipo_aval" value="${i}" ${state.tipo_aval===i?'checked':''}>
           <div class="radio-dot"></div>
-          <div class="radio-label">${t}</div>
+          <div>
+            <div class="radio-label">${t}</div>
+            ${i===3?'<div style="font-size:11px;color:var(--muted);margin-top:2px">Avaliação para venda de painel ao parceiro</div>':''}
+          </div>
         </label>`).join('')}
       </div>
     </div>
@@ -819,6 +888,183 @@ function renderChecklist(secId) {
 }
 
 // ── Parecer ────────────────────────────────────────────────────────────────
+// ── Venda ──────────────────────────────────────────────────────────────────
+function setVenda(key, val) {
+  if (!state.venda) state.venda = defaultState().venda;
+  state.venda[key] = val;
+  scheduleSave();
+}
+function setVendaEquip(key) {
+  if (!state.venda) state.venda = defaultState().venda;
+  state.venda.equipamentos[key] = !state.venda.equipamentos[key];
+  scheduleSave();
+  renderContent();
+}
+function setVendaYN(key, val) {
+  if (!state.venda) state.venda = defaultState().venda;
+  state.venda[key] = state.venda[key] === val ? null : val;
+  scheduleSave();
+  renderContent();
+}
+
+let _vendaFotoIdx = null;
+function triggerVendaFoto(idx) {
+  _vendaFotoIdx = idx;
+  const input = document.getElementById('vendaFotoInput');
+  if (input) { input.value = ''; input.click(); }
+}
+function handleVendaFotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file || _vendaFotoIdx === null) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
+        else       { w = Math.round(w * MAX/h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.75);
+      if (!state.venda.fotos_venda) state.venda.fotos_venda = Array(6).fill(null);
+      state.venda.fotos_venda[_vendaFotoIdx] = compressed;
+      scheduleSave();
+      updateVendaFotoSlot(_vendaFotoIdx, compressed);
+      _vendaFotoIdx = null;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function updateVendaFotoSlot(idx, dataUrl) {
+  const slot = document.getElementById(`vendaSlot_${idx}`);
+  if (!slot) return;
+  slot.classList.add('filled');
+  slot.innerHTML = `
+    <img src="${dataUrl}" alt="foto ${idx+1}">
+    <div class="foto-slot-icon">+</div>
+    <div class="foto-slot-label">0${idx+1}</div>
+    <button class="foto-remove" onclick="removeVendaFoto(event,${idx})">✕</button>`;
+}
+function removeVendaFoto(event, idx) {
+  event.stopPropagation();
+  state.venda.fotos_venda[idx] = null;
+  scheduleSave();
+  const slot = document.getElementById(`vendaSlot_${idx}`);
+  if (!slot) return;
+  slot.classList.remove('filled');
+  slot.innerHTML = `<div class="foto-slot-icon">+</div><div class="foto-slot-label">0${idx+1}</div>`;
+}
+
+function renderVenda() {
+  const v = state.venda || defaultState().venda;
+  const eq = v.equipamentos || {};
+  const equipList = [
+    { key:'led',               label:'LED (módulos + cabos de dados)' },
+    { key:'pc',                label:'PC / Mini PC' },
+    { key:'sender_receiver',   label:'Placas Sender / Receiver' },
+    { key:'cabos',             label:'Cabos de alimentação' },
+    { key:'infra_eletrica',    label:'Infra elétrica / dados / quadro' },
+    { key:'estrutura_fixacao', label:'Estrutura de fixação' },
+    { key:'instalacao',        label:'Instalação' },
+  ];
+  const fotos_v = v.fotos_venda || Array(6).fill(null);
+  const parecerViavel = state.parecer === 0 || state.parecer === 1;
+
+  return `
+  <div class="section-card">
+    <div class="section-head">
+      <div class="section-num" style="background:var(--accent);color:#000">V</div>
+      <div class="section-title">Dados da Venda</div>
+    </div>
+    <div class="section-body">
+      <div class="field"><label>Nome do Ponto</label>
+        <input type="text" id="vf_nome" value="${esc(v.nome_ponto)}" placeholder="ex: Posto Shell Adrianópolis"></div>
+      <div class="field"><label>Local Sugerido</label>
+        <input type="text" id="vf_local" value="${esc(v.local_sugerido)}" placeholder="Descreva o local sugerido para instalação"></div>
+      <div class="grid-2">
+        <div class="field"><label>Posição Visual</label>
+          <input type="text" id="vf_posicao" value="${esc(v.posicao_visual)}" placeholder="ex: Frente de rua, lateral direita"></div>
+        <div class="field"><label>Dimensões do Painel</label>
+          <input type="text" id="vf_dim" value="${esc(v.dimensoes)}" placeholder="ex: 3,00 x 5,00m"></div>
+      </div>
+      <div class="field"><label>Altura da Base do Painel</label>
+        <input type="text" id="vf_altura" value="${esc(v.altura_base)}" placeholder="ex: 3,50m do solo"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-head">
+      <div class="section-num" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent)">⚙</div>
+      <div class="section-title">Equipamentos Contemplados</div>
+    </div>
+    <div class="section-body">
+      <div class="check-list">
+        ${equipList.map(e => `
+        <div class="check-list-item ${eq[e.key]?'checked':''}" onclick="setVendaEquip('${e.key}')">
+          <div class="check-box">${eq[e.key]?'✓':''}</div>
+          <div class="check-list-label">${e.label}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-head">
+      <div class="section-num" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent)">✔</div>
+      <div class="section-title">Viabilidades</div>
+    </div>
+    <div class="section-body">
+      <div class="field"><label>Necessidade de Estrutura Metalúrgica</label>
+        <div class="yn-group">
+          <button class="yn-btn yes ${v.necessita_metalurgia===true?'active':''}" onclick="setVendaYN('necessita_metalurgia',true)">Sim</button>
+          <button class="yn-btn no  ${v.necessita_metalurgia===false?'active':''}" onclick="setVendaYN('necessita_metalurgia',false)">Não</button>
+        </div>
+      </div>
+      <div class="field"><label>Viabilidade Infra Elétrica</label>
+        <div class="yn-group">
+          <button class="yn-btn yes ${v.viabilidade_eletrica===true?'active':''}" onclick="setVendaYN('viabilidade_eletrica',true)">Sim</button>
+          <button class="yn-btn no  ${v.viabilidade_eletrica===false?'active':''}" onclick="setVendaYN('viabilidade_eletrica',false)">Não</button>
+        </div>
+      </div>
+      <div class="field"><label>Circuito Elétrico</label>
+        <div class="yn-group">
+          <button class="yn-btn opt1 ${v.circuito_eletrico==='com'?'active':''}" onclick="setVendaYN('circuito_eletrico','com')">Com Viabilidade</button>
+          <button class="yn-btn opt2 ${v.circuito_eletrico==='sem'?'active':''}" onclick="setVendaYN('circuito_eletrico','sem')">Sem Viabilidade</button>
+        </div>
+      </div>
+      <div class="field"><label>Necessita Licença</label>
+        <div class="yn-group">
+          <button class="yn-btn yes ${v.necessita_licenca===true?'active':''}" onclick="setVendaYN('necessita_licenca',true)">Sim</button>
+          <button class="yn-btn no  ${v.necessita_licenca===false?'active':''}" onclick="setVendaYN('necessita_licenca',false)">Não</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foto-grid-section">
+    <div class="foto-grid-head">
+      <div class="section-num" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent)">📷</div>
+      <div class="section-title">Registro Fotográfico (6 fotos)</div>
+    </div>
+    <div class="foto-grid-body-6">
+      ${fotos_v.map((foto,i) => `
+      <div class="foto-slot ${foto?'filled':''}" onclick="triggerVendaFoto(${i})" id="vendaSlot_${i}">
+        ${foto ? `<img src="${foto}" alt="foto ${i+1}">` : ''}
+        <div class="foto-slot-icon">+</div>
+        <div class="foto-slot-label">0${i+1}</div>
+        ${foto ? `<button class="foto-remove" onclick="removeVendaFoto(event,${i})">✕</button>` : ''}
+      </div>`).join('')}
+    </div>
+    <div class="foto-hint">Toque em cada slot para adicionar foto da galeria</div>
+    <input type="file" id="vendaFotoInput" accept="image/*" style="display:none" onchange="handleVendaFotoUpload(event)">
+  </div>`;
+}
+
 function renderParecer() {
   const p = state.parecer;
   return `
@@ -833,6 +1079,13 @@ function renderParecer() {
         <button class="parecer-btn warn ${p===1?'active':''}" onclick="setParecer(1)">⚠ Com Ressalvas</button>
         <button class="parecer-btn err  ${p===2?'active':''}" onclick="setParecer(2)">✕ Reprovado</button>
       </div>
+      ${state.tipo_aval===3 && p===2 ? `
+      <div class="novo-local-block">
+        <div class="field" style="margin-top:8px">
+          <label>Novo Local Sugerido (se houver)</label>
+          <textarea id="vf_novo_local" placeholder="Descreva um local alternativo para análise futura...">${esc((state.venda||{}).novo_local||'')}</textarea>
+        </div>
+      </div>` : ''}
     </div>
   </div>
   <div class="section-card">
@@ -906,8 +1159,9 @@ function renderParecer() {
 
 // ── Nav ────────────────────────────────────────────────────────────────────
 function renderNav() {
+  const steps = getSteps();
   const isFirst = state.step === 0;
-  const isLast  = state.step === STEPS.length - 1;
+  const isLast  = state.step === steps.length - 1;
   return `<div class="nav-row">
     ${!isFirst ? `<button class="btn-nav" onclick="goStep(${state.step-1})">← Anterior</button>` : ''}
     ${!isLast  ? `<button class="btn-nav primary" onclick="goStep(${state.step+1})">Próximo →</button>` : ''}
@@ -937,10 +1191,21 @@ function bindEvents() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', e => { state[key] = e.target.value; scheduleSave(); });
   });
+
+  // Venda fields
+  const vendaMap = { vf_nome:'nome_ponto', vf_local:'local_sugerido',
+                     vf_posicao:'posicao_visual', vf_dim:'dimensoes', vf_altura:'altura_base' };
+  Object.entries(vendaMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', e => { setVenda(key, e.target.value); });
+  });
+  const novoLocalEl = document.getElementById('vf_novo_local');
+  if (novoLocalEl) novoLocalEl.addEventListener('input', e => { setVenda('novo_local', e.target.value); });
 }
 
 function goStep(i) {
-  if (i<0 || i>=STEPS.length) return;
+  const steps = getSteps();
+  if (i<0 || i>=steps.length) return;
   state.step = i;
   scheduleSave();
   renderApp();
@@ -949,8 +1214,10 @@ function goStep(i) {
 
 function selectTipo(i) {
   state.tipo_aval = i;
+  // Reset to step 1 (tipo) to avoid step index out of bounds when switching flow
+  state.step = 1;
   scheduleSave();
-  renderContent();
+  renderApp();
 }
 
 function setStatus(secId, itemId, status) {
@@ -1336,6 +1603,136 @@ function generatePDF(s) {
 
   ln(ML,y,ML+CW,y,C.mgray,0.3);
   sf('normal',6,C.mgray);
+  // ── VENDA PDF ──────────────────────────────────────────────────────────
+  if (s.tipo_aval === 3) {
+    const v = s.venda || {};
+    const eq = v.equipamentos || {};
+    const equipLabels = { led:'LED', pc:'PC / Mini PC', sender_receiver:'Placas Sender/Receiver',
+      cabos:'Cabos de alimentação', infra_eletrica:'Infra elétrica/dados/quadro',
+      estrutura_fixacao:'Estrutura de fixação', instalacao:'Instalação' };
+    const yn = (val) => val===true?'Sim':val===false?'Não':'—';
+    const circ = v.circuito_eletrico==='com'?'Com Viabilidade':v.circuito_eletrico==='sem'?'Sem Viabilidade':'—';
+
+    // Cabeçalho
+    fr(ML,y,CW,18,C.dark);
+    sf('bold',14,C.white); tx('PROPOSTA DE VENDA — PAINEL LED',ML+7,y+8);
+    sf('normal',7,C.mgray); tx('Urbmidia — Avaliacao de Ponto para Venda — Uso Interno',ML+7,y+13);
+    const info_x2=ML+CW*0.68;
+    ln(info_x2,y+1,info_x2,y+17,C.dgray,0.4);
+    sf('bold',6.5,C.mgray);
+    tx(`Resp.: ${d.responsavel||'—'}`,info_x2+4,y+6);
+    tx(`Data: ${d.data||'—'}`,info_x2+4,y+10.5);
+    tx(`Cod.: ${d.codigo||'—'}`,info_x2+4,y+15);
+    y+=21;
+
+    // Identificação do ponto
+    fr(ML,y,CW,5.5,C.accent); sf('bold',7,C.white); tx('IDENTIFICACAO DO PONTO',ML+3,y+3.8); y+=5.5;
+    doc.setDrawColor(...C.accent); doc.setLineWidth(0.5); doc.rect(ML,y,CW,28,'S');
+    const iFields=[['NOME DO PONTO',v.nome_ponto],['LOCAL SUGERIDO',v.local_sugerido],
+                   ['POSICAO VISUAL',v.posicao_visual],['DIMENSOES DO PAINEL',v.dimensoes],
+                   ['ALTURA DA BASE',v.altura_base]];
+    let fy2=y+4;
+    const col2w=(CW-6)/2;
+    iFields.forEach(([l,val],i)=>{
+      const fx=ML+(i%2)*(col2w+6)+3;
+      if(i%2===0 && i>0) fy2+=8;
+      sf('bold',5.5,C.accent); tx(l,fx,fy2);
+      sf('normal',7.5,C.dark); tx((val||'—').substring(0,40),fx,fy2+3.5);
+      ln(fx-1,fy2+4.5,fx+col2w-4,fy2+4.5,C.ltgray,0.3);
+    });
+    y+=31;
+
+    // Equipamentos
+    fr(ML,y,CW,5.5,C.secbg); sf('bold',7,C.white); tx('EQUIPAMENTOS CONTEMPLADOS',ML+3,y+3.8); y+=5.5;
+    const equips=Object.entries(equipLabels);
+    const eq_col_w=(CW-3)/2;
+    for(let ei=0;ei<equips.length;ei+=2){
+      for(let c=0;c<2;c++){
+        const idx=ei+c; if(idx>=equips.length) break;
+        const [key,lbl]=equips[idx];
+        const ex=ML+c*(eq_col_w+3);
+        const checked=eq[key];
+        fr(ex,y,eq_col_w,6,checked?[5,46,22]:C.ltgray);
+        sf('bold',7,checked?C.ok:C.dgray);
+        tx(`${checked?'[x]':'[ ]'}  ${lbl}`,ex+3,y+4.2);
+      }
+      ln(ML,y+6,ML+CW,y+6,C.mgray,0.3);
+      y+=6;
+    }
+    y+=3;
+
+    // Viabilidades
+    fr(ML,y,CW,5.5,C.dgray); sf('bold',7,C.white); tx('VIABILIDADES',ML+3,y+3.8); y+=5.5;
+    const viabs=[
+      ['Estrutura Metalurgica', yn(v.necessita_metalurgia)],
+      ['Viabilidade Eletrica',  yn(v.viabilidade_eletrica)],
+      ['Circuito Eletrico',     circ],
+      ['Necessita Licenca',     yn(v.necessita_licenca)],
+    ];
+    const vw=(CW-9)/4;
+    viabs.forEach(([lbl,val],i)=>{
+      const vx=ML+i*(vw+3);
+      const isPos=val==='Sim'||val==='Com Viabilidade';
+      const isNeg=val==='Não'||val==='Sem Viabilidade';
+      fr(vx,y,vw,12,isPos?[5,46,22]:isNeg?[69,10,10]:C.ltgray);
+      sf('bold',5.5,C.mgray); tx(lbl,vx+2,y+4);
+      sf('bold',8,isPos?C.ok:isNeg?C.err:C.dark); tx(val||'—',vx+vw/2,y+9.5,{align:'center'});
+    });
+    y+=15;
+
+    // Fotos venda
+    fr(ML,y,CW,5.5,C.secbg); sf('bold',7,C.white); tx('REGISTRO FOTOGRAFICO',ML+3,y+3.8); y+=7;
+    const fv=v.fotos_venda||Array(6).fill(null);
+    const fbw=(CW-10)/3, fbh=30;
+    for(let r=0;r<2;r++) for(let c=0;c<3;c++){
+      const idx=r*3+c;
+      const bx=ML+c*(fbw+5), by=y+r*(fbh+2);
+      fr(bx,by,fbw,fbh,C.ltgray);
+      doc.setDrawColor(...C.mgray); doc.setLineWidth(0.4); doc.rect(bx,by,fbw,fbh,'S');
+      if(fv[idx]){ try{ doc.addImage(fv[idx],'JPEG',bx+0.5,by+0.5,fbw-1,fbh-6); }catch(e){} }
+      fr(bx,by+fbh-5.5,fbw,5.5,fv[idx]?[0,0,0]:C.ltgray);
+      sf('normal',5.5,fv[idx]?C.white:C.dgray); tx(`0${idx+1}`,bx+2,by+fbh-2);
+    }
+    y+=2*(fbh+2)+3;
+
+    // Parecer
+    fr(ML,y,CW*0.55,14,C.dark);
+    sf('bold',7,C.white); tx('PARECER FINAL DE VIABILIDADE',ML+3,y+5);
+    sf('normal',6,C.mgray); tx('Resultado da avaliacao',ML+3,y+10);
+    fr(ML+CW*0.55,y,CW*0.45,14,parecerColor);
+    sf('bold',12,C.white); tx(parecerLabel,ML+CW*0.55+(CW*0.45)/2,y+9,{align:'center'});
+    y+=17;
+
+    // Novo local (se reprovado)
+    if(s.parecer===2 && v.novo_local){
+      sf('bold',6.5,C.dgray); tx('Novo Local Sugerido:',ML,y+3.5); y+=5.5;
+      const nl=doc.splitTextToSize(v.novo_local,CW-4);
+      fr(ML,y,CW,Math.max(10,nl.length*3+5),C.ltgray);
+      sf('normal',7.5,C.dark); tx(nl,ML+2,y+4);
+      y+=Math.max(10,nl.length*3+5)+4;
+    }
+
+    // Justificativa
+    if(s.justificativa){
+      sf('bold',6.5,C.dgray); tx('Justificativa:',ML,y+3.5); y+=5.5;
+      const jl=doc.splitTextToSize(s.justificativa,CW-4);
+      fr(ML,y,CW,Math.max(10,jl.length*3+5),C.ltgray);
+      sf('normal',7.5,C.dark); tx(jl,ML+2,y+4);
+      y+=Math.max(10,jl.length*3+5)+4;
+    }
+
+    ln(ML,y,ML+CW,y,C.mgray,0.3);
+    sf('normal',6,C.mgray);
+    tx(`Urbmidia — Proposta de Venda  |  Cod.: ${d.codigo||'—'}  |  Uso Interno  |  v1.3`,ML+CW/2,y+4,{align:'center'});
+
+    const safev = (v.nome_ponto||d.codigo||'VENDA')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-zA-Z0-9\s\-_]/g,'').trim()
+      .replace(/\s+/g,'_').substring(0,60);
+    doc.save(`Parecer - ${safev}.pdf`);
+    return;
+  }
+
   tx(`Urbmidia — Relatorio de Avaliacao de Ponto  |  Cod.: ${d.codigo||'—'}  |  Uso Interno  |  v1.2`,ML+CW/2,y+4,{align:'center'});
 
   const safe = (d.endereco || d.codigo || 'PONTO')
