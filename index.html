@@ -537,6 +537,7 @@ const MODELOS = [
   { label:"MUP Horiz. 6x2m",    dim:"5,76 x 1,92m", area:"11,06 m²", dp:"P8",        mod:"216", prop:"3:1"  },
   { label:"MUP Horiz. 9x3m",    dim:"8,64 x 2,88m", area:"24,88 m²", dp:"P8",        mod:"486", prop:"3:1"  },
   { label:"Lampion 1,6x2,56m",  dim:"1,60 x 2,56m", area:"4,10 m²",  dp:"P4 / P3.9", mod:"80",  prop:"5:8"  },
+  { label:"Customizado",         dim:"—",             area:"—",        dp:"—",         mod:"—",   prop:"—"   },
 ];
 
 const CHECKLIST = [
@@ -614,6 +615,7 @@ function defaultState() {
     recomendacoes: '',
     fotos: Array(8).fill(null),
     rating: null,
+    modelo_custom: '',
     venda: {
       nome_ponto: '', local_sugerido: '', posicao_visual: '', dimensoes: '',
       altura_base: '',
@@ -640,6 +642,7 @@ function loadCurrentState() {
       if (!s.fotos) s.fotos = Array(8).fill(null);
       if (s.rating === undefined) s.rating = null;
       if (!s.venda) s.venda = defaultState().venda;
+      if (s.modelo_custom === undefined) s.modelo_custom = '';
       return s;
     }
   } catch(e) {}
@@ -794,9 +797,12 @@ function renderIdent() {
     <div class="section-body">
       <div class="field"><label>Modelo Avaliado</label>
         <select id="f_modelo">
-          ${MODELOS.map((m,i)=>`<option value="${i}" ${state.modelo===i?'selected':''}>${m.label} — ${m.dim} — ${m.dp}</option>`).join('')}
+          ${MODELOS.map((m,i)=>`<option value="${i}" ${state.modelo===i?'selected':''}>${m.label}${m.dim!=='—'?' — '+m.dim:''}</option>`).join('')}
         </select>
       </div>
+      ${state.modelo===5 ? `
+      <div class="field"><label>Dimensões do Painel (Customizado)</label>
+        <input type="text" id="f_modelo_custom" value="${esc(state.modelo_custom)}" placeholder="ex: 2,00 x 3,00m"></div>` : ''}
     </div>
   </div>`;
 }
@@ -930,9 +936,13 @@ function handleVendaFotoUpload(event) {
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       const compressed = canvas.toDataURL('image/jpeg', 0.75);
-      if (!state.venda.fotos_venda) state.venda.fotos_venda = Array(6).fill(null);
+      // Garante que state.venda e fotos_venda existem
+      if (!state.venda) state.venda = defaultState().venda;
+      if (!state.venda.fotos_venda || state.venda.fotos_venda.length < 6)
+        state.venda.fotos_venda = Array(6).fill(null);
       state.venda.fotos_venda[_vendaFotoIdx] = compressed;
-      scheduleSave();
+      // Salva imediatamente (sem debounce) para garantir persistência
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setAutosaveStatus('saved'); } catch(e) {}
       updateVendaFotoSlot(_vendaFotoIdx, compressed);
       _vendaFotoIdx = null;
     };
@@ -1182,7 +1192,13 @@ function bindEvents() {
     if (el) el.addEventListener('input', e => { state.ident[key] = e.target.value; scheduleSave(); });
   });
   const modelEl = document.getElementById('f_modelo');
-  if (modelEl) modelEl.addEventListener('change', e => { state.modelo = parseInt(e.target.value); scheduleSave(); });
+  if (modelEl) modelEl.addEventListener('change', e => {
+    state.modelo = parseInt(e.target.value);
+    scheduleSave();
+    renderContent(); // re-render to show/hide custom field
+  });
+  const modelCustomEl = document.getElementById('f_modelo_custom');
+  if (modelCustomEl) modelCustomEl.addEventListener('input', e => { state.modelo_custom = e.target.value; scheduleSave(); });
 
   const parecerMap = { f_pontos:'pontos_fortes', f_impeditivos:'impeditivos',
                        f_pendencias:'pendencias', f_recomendacoes:'recomendacoes',
@@ -1283,8 +1299,7 @@ function handleFotoUpload(event) {
       const compressed = canvas.toDataURL('image/jpeg', 0.75);
       if (!state.fotos) state.fotos = Array(8).fill(null);
       state.fotos[_fotoTargetIdx] = compressed;
-      scheduleSave();
-      // Atualiza apenas o slot sem re-renderizar tudo
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setAutosaveStatus('saved'); } catch(e) {}
       updateFotoSlot(_fotoTargetIdx, compressed);
       _fotoTargetIdx = null;
     };
@@ -1350,7 +1365,7 @@ function buildWhatsAppText(s) {
     `${d.bairro||''}`,
     ``,
     `*Tipo:* ${tipoAval}`,
-    `*Modelo:* ${modelo.label}`,
+    `*Modelo:* ${s.modelo===5 ? `Customizado — ${s.modelo_custom||'—'}` : (MODELOS[s.modelo]||MODELOS[0]).label}`,
     `*Responsável:* ${d.responsavel||'—'}`,
     `*Parceiro:* ${d.parceiro||'—'}`,
     ``,
@@ -1395,7 +1410,9 @@ function generatePDF(s) {
   };
 
   const d = s.ident;
-  const modelo = MODELOS[s.modelo];
+  const modelo = MODELOS[s.modelo] || MODELOS[0];
+  const modeloLabel = s.modelo===5 ? `Customizado — ${s.modelo_custom||'—'}` : modelo.label;
+  const modeloDp    = s.modelo===5 ? '—' : modelo.dp;
   const tipoAval = TIPOS_AVAL[s.tipo_aval];
   const parecerLabels = ['APROVADO','APROVADO COM RESSALVAS','REPROVADO'];
   const parecerColors = [C.ok, C.warn, C.err];
@@ -1457,7 +1474,7 @@ function generatePDF(s) {
     });
   }
   drawFields([['ENDERECO',d.endereco],['BAIRRO/CIDADE',d.bairro],['GPS',d.gps],['PARCEIRO',d.parceiro],['TIPO ESTAB.',d.tipo_estab]],ML,y,halfW);
-  drawFields([['MODELO',modelo.label],['DOT PITCH',modelo.dp],['DATA',d.data],['RESPONSAVEL',d.responsavel],['CODIGO',d.codigo]],ML+halfW+4,y,halfW);
+  drawFields([['MODELO',modeloLabel],['DOT PITCH',modeloDp],['DATA',d.data],['RESPONSAVEL',d.responsavel],['CODIGO',d.codigo]],ML+halfW+4,y,halfW);
   y+=33;
 
   // Specs
@@ -1469,7 +1486,7 @@ function generatePDF(s) {
   let sx=ML; sh.forEach((h,i)=>{ sf('bold',6.5,C.dark); tx(h,sx+2,y+3.8); sx+=sc[i]; }); y+=5.5;
   MODELOS.forEach((m,mi)=>{
     fr(ML,y,CW,5.5,mi%2?C.ltgray:C.white);
-    if(mi===s.modelo) fr(ML,y,CW,5.5,[255,235,210]);
+    if(mi===s.modelo && mi<5) fr(ML,y,CW,5.5,[255,235,210]);
     sx=ML;
     [m.label,m.dim,m.area,m.dp,m.mod,m.prop].forEach((v,vi)=>{
       sf(mi===s.modelo?'bold':'normal',6.5,C.dark); tx(v,sx+2,y+3.8); sx+=sc[vi];
